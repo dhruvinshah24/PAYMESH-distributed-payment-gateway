@@ -1,0 +1,56 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: paymesh-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: dc_paygateway
+    ports:
+      - "3306:3306"
+    volumes:
+      - paymesh_mysql:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    image: maven:3.9.11-eclipse-temurin-17
+    container_name: paymesh-backend
+    working_dir: /app
+    command: ["mvn", "spring-boot:run"]
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/dc_paygateway?allowMultiQueries=true&serverTimezone=Asia/Kolkata
+      DB_USER: root
+      DB_PASSWORD: root
+      PAYMESH_NODE_ID: NODE-1
+      PAYMESH_NODE_PORT: 8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    image: node:22-alpine
+    container_name: paymesh-frontend
+    working_dir: /app
+    command: ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0"]
+    environment:
+      VITE_API_URL: http://localhost:8080/api
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - paymesh_node_modules:/app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  paymesh_mysql:
+  paymesh_node_modules:

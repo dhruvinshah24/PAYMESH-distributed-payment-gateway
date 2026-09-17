@@ -1,0 +1,2 @@
+import java.rmi.registry.LocateRegistry; import java.rmi.registry.Registry;
+public class RMIServer { public static void main(String[] a){ try{ Registry r=LocateRegistry.createRegistry(1099); r.rebind("PaymentService",new PaymentServiceImpl()); System.out.println("PAYMESH RMI SERVER | port=1099 | multithreading=enabled"); System.out.println("Waiting for payment requests..."); }catch(Exception e){e.printStackTrace();} } }

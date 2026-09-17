@@ -1,0 +1,19 @@
+node_modules/
+dist/
+*.class
+*.log
+.idea/
+.vscode/
+.DS_Store
+# Local environment
+.env
+*.log
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Java
+backend/target/
+*.sql.bak
+*.dump
