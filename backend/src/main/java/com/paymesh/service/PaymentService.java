@@ -120,8 +120,9 @@ public class PaymentService {
     private long tick() { return lamport.incrementAndGet(); }
 
     private String nextPaymentId() {
-        Integer a = db.queryForObject("SELECT COALESCE(MAX(CAST(SUBSTRING(payment_id,5) AS UNSIGNED)),1000) FROM payments", Integer.class);
-        Integer b = db.queryForObject("SELECT COALESCE(MAX(CAST(SUBSTRING(payment_id,5) AS UNSIGNED)),1000) FROM dc_paygateway_backup.replica_payments", Integer.class);
+        // experiment_tag IS NULL excludes Experiment 6's independent PAY-6xxx id range (see Experiment6Service)
+        Integer a = db.queryForObject("SELECT COALESCE(MAX(CAST(SUBSTRING(payment_id,5) AS UNSIGNED)),1000) FROM payments WHERE experiment_tag IS NULL", Integer.class);
+        Integer b = db.queryForObject("SELECT COALESCE(MAX(CAST(SUBSTRING(payment_id,5) AS UNSIGNED)),1000) FROM dc_paygateway_backup.replica_payments WHERE experiment_tag IS NULL", Integer.class);
         int n = Math.max(Objects.requireNonNull(a), Objects.requireNonNull(b)) + 1;
         return "PAY-" + String.format("%04d", n);
     }
@@ -228,7 +229,8 @@ public class PaymentService {
     }
 
     public List<Map<String,Object>> payments() {
-        return db.queryForList("SELECT p.payment_id,p.order_id,p.customer_id,p.amount,p.currency,p.method,p.status,p.idempotency_key,p.shard_id,p.lamport_ts,p.primary_node_id,p.created_at,p.updated_at,(SELECT processor_id FROM payment_attempts a WHERE a.payment_id=p.payment_id ORDER BY attempt_no DESC LIMIT 1) processor_id FROM payments p UNION ALL SELECT b.payment_id,b.order_id,b.customer_id,b.amount,b.currency,b.method,b.status,b.idempotency_key,b.shard_id,b.lamport_ts,b.primary_node_id,b.replicated_at,b.replicated_at,NULL FROM dc_paygateway_backup.replica_payments b WHERE NOT EXISTS (SELECT 1 FROM payments p2 WHERE p2.payment_id=b.payment_id) ORDER BY created_at DESC LIMIT 100");
+        // experiment_tag IS NULL excludes Experiment 6's independent demo data (see Experiment6Service)
+        return db.queryForList("SELECT p.payment_id,p.order_id,p.customer_id,p.amount,p.currency,p.method,p.status,p.idempotency_key,p.shard_id,p.lamport_ts,p.primary_node_id,p.created_at,p.updated_at,(SELECT processor_id FROM payment_attempts a WHERE a.payment_id=p.payment_id ORDER BY attempt_no DESC LIMIT 1) processor_id FROM payments p WHERE p.experiment_tag IS NULL UNION ALL SELECT b.payment_id,b.order_id,b.customer_id,b.amount,b.currency,b.method,b.status,b.idempotency_key,b.shard_id,b.lamport_ts,b.primary_node_id,b.replicated_at,b.replicated_at,NULL FROM dc_paygateway_backup.replica_payments b WHERE b.experiment_tag IS NULL AND NOT EXISTS (SELECT 1 FROM payments p2 WHERE p2.payment_id=b.payment_id) ORDER BY created_at DESC LIMIT 100");
     }
     public List<Map<String,Object>> events() { return db.queryForList("SELECT event_id,event_type,node_id,message,lamport_ts,created_at FROM system_events ORDER BY event_id DESC LIMIT 100"); }
     public Map<String,Object> payment(String id) {
@@ -237,8 +239,9 @@ public class PaymentService {
         out.put("ledger",db.queryForList("SELECT * FROM ledger_entries WHERE payment_id=? ORDER BY created_at",id)); return out;
     }
     public Map<String,Object> consistency() {
-        int p=count("SELECT COUNT(*) FROM payments"), b=count("SELECT COUNT(*) FROM dc_paygateway_backup.replica_payments");
-        int mismatch=count("SELECT COUNT(*) FROM payments p LEFT JOIN dc_paygateway_backup.replica_payments b ON p.payment_id=b.payment_id WHERE b.payment_id IS NULL OR p.status<>b.status OR p.amount<>b.amount OR p.lamport_ts<>b.lamport_ts");
+        // experiment_tag IS NULL excludes Experiment 6's independent demo data (see Experiment6Service)
+        int p=count("SELECT COUNT(*) FROM payments WHERE experiment_tag IS NULL"), b=count("SELECT COUNT(*) FROM dc_paygateway_backup.replica_payments WHERE experiment_tag IS NULL");
+        int mismatch=count("SELECT COUNT(*) FROM payments p LEFT JOIN dc_paygateway_backup.replica_payments b ON p.payment_id=b.payment_id WHERE p.experiment_tag IS NULL AND (b.payment_id IS NULL OR p.status<>b.status OR p.amount<>b.amount OR p.lamport_ts<>b.lamport_ts)");
         return Map.of("primaryCount",p,"backupCount",b,"mismatches",mismatch,"consistent",mismatch==0 && p==b,"mode",replicationEnabled?"SYNCHRONOUS":"DISABLED");
     }
     private int count(String sql){Integer x=db.queryForObject(sql,Integer.class);return x==null?0:x;}
@@ -285,5 +288,5 @@ public class PaymentService {
         appendEvent("PAYMENT_COMMITTED",activePrimary,processorChoice+" routed for "+paymentId+" ₹"+amount,tick());
     }
 
-    public Map<String,Object> settlement(){int success=count("SELECT COUNT(*) FROM payments WHERE status='SUCCESS'"); BigDecimal gross=db.queryForObject("SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='SUCCESS'",BigDecimal.class); BigDecimal fees=gross.multiply(new BigDecimal("0.020")); return Map.of("successfulPayments",success,"gross",gross,"fees",fees,"net",gross.subtract(fees),"status","READY_FOR_SETTLEMENT");}
+    public Map<String,Object> settlement(){int success=count("SELECT COUNT(*) FROM payments WHERE status='SUCCESS' AND experiment_tag IS NULL"); BigDecimal gross=db.queryForObject("SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='SUCCESS' AND experiment_tag IS NULL",BigDecimal.class); BigDecimal fees=gross.multiply(new BigDecimal("0.020")); return Map.of("successfulPayments",success,"gross",gross,"fees",fees,"net",gross.subtract(fees),"status","READY_FOR_SETTLEMENT");}
 }

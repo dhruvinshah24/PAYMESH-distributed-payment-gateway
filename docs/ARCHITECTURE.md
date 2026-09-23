@@ -24,6 +24,7 @@ When NODE-1 fails, NODE-2 becomes the logical primary and writes authoritative p
 | Lamport | Payment/system event logical timestamps |
 | Bully | Nodes & Election page + election records |
 | Experiment 5 | Primary-backup failover, promotion, recovery, resync, consistency |
+| Experiment 6 | Data Consistency & Replication page — synchronous/asynchronous replication models, replica lag, consistency verification, replica failure/recovery, resync (see `docs/EXPERIMENT_6.md`) |
 | 2PC | `demos/twophase` educational coordinator/participants |
 | Ledger | Double-entry debit/credit verification |
 | Settlement | Gross → fee → net settlement summary |
